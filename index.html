@@ -3,89 +3,255 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Paint Stock System</title>
+  <title>Smart Ink Pro - Tanapong</title>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { font-family: 'Kanit', sans-serif; }
+    .sidebar-active { background: rgba(255,255,255,0.15); border-left: 4px solid #fff; opacity: 1 !important; }
+    .modal-show { opacity: 1 !important; pointer-events: auto !important; }
+    @media print { aside, header, .nav-btn, #toast-container { display: none !important; } .p-8 { padding: 0 !important; } }
+  </style>
 </head>
-<body class="bg-slate-50 min-h-screen p-4 md:p-10">
+<body class="bg-[#f1f5f9] flex min-h-screen text-slate-800">
 
-  <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
-    <h1 class="text-3xl font-black text-slate-800 tracking-tight">INK STOCK 🎨</h1>
-    <div class="flex items-center gap-4">
-      <div id="loading-status" class="text-xs font-bold text-slate-400 uppercase tracking-widest">Connecting...</div>
-      <input type="text" id="search" onkeyup="filter()" placeholder="ค้นหาเครื่องหรือรหัสสี..." 
-             class="px-5 py-2.5 rounded-2xl border-none shadow-sm focus:ring-2 focus:ring-indigo-500 w-full md:w-72 outline-none">
+  <aside class="w-72 bg-[#001b6e] text-white flex flex-col shadow-2xl sticky top-0 h-screen z-20">
+    <div class="p-8 border-b border-white/10 text-center"><h1 class="text-2xl font-bold tracking-tighter uppercase">Ink System</h1></div>
+    <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+      <button onclick="changeView('all')" id="nav-all" class="nav-btn w-full flex items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition sidebar-active"><i data-lucide="layout-grid"></i> หน้ารวมทั้งหมด</button>
+      <button onclick="changeView('summary')" id="nav-summary" class="nav-btn w-full flex items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition opacity-60"><i data-lucide="bar-chart-3"></i> สรุปและรายงาน</button>
+      <div class="pt-6 pb-2 px-4 text-[10px] font-bold text-blue-300 uppercase tracking-widest border-t border-white/5 mt-4">สายการผลิต</div>
+      <div id="machine-menu"></div>
+    </nav>
+  </aside>
+
+  <div class="flex-1 flex flex-col">
+    <header class="bg-white p-6 shadow-sm flex justify-between items-center sticky top-0 z-10">
+      <h2 id="page-title" class="text-xl font-bold uppercase">All Items</h2>
+      <div class="flex items-center gap-4">
+        <div id="status-dot" class="w-3 h-3 rounded-full bg-slate-300"></div>
+        <input type="text" id="search" onkeyup="filter()" placeholder="ค้นหา..." class="px-5 py-2 rounded-full bg-slate-100 text-sm outline-none w-64 focus:ring-2 focus:ring-blue-500">
+      </div>
+    </header>
+
+    <div class="p-8 flex-1">
+      <div id="inventory-view" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+      
+      <div id="summary-view" class="hidden space-y-6">
+        <div class="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+          <div class="flex flex-wrap justify-between items-center mb-8 gap-4">
+            <h3 class="text-lg font-bold uppercase tracking-wide">สถิติเบิกจ่าย</h3>
+            <div class="flex gap-2">
+              <button onclick="exportExcel()" class="px-4 py-2 bg-green-600 text-white rounded-xl text-[10px] font-bold hover:bg-green-700 transition uppercase">Export Excel</button>
+              <button onclick="window.print()" class="px-4 py-2 bg-red-600 text-white rounded-xl text-[10px] font-bold hover:bg-red-700 transition uppercase">Save PDF</button>
+              
+              <select id="chart-machine" onchange="loadChart()" class="bg-slate-100 rounded-xl px-4 py-2 text-[10px] font-bold outline-none">
+                <option value="all">ทุกเครื่องพิมพ์</option>
+              </select>
+
+              <select id="timeframe" onchange="loadChart()" class="bg-slate-100 rounded-xl px-4 py-2 text-[10px] font-bold outline-none">
+                <option value="day">รายวัน (7 วันล่าสุด)</option><option value="month">รายเดือน</option><option value="year">รายปี</option>
+              </select>
+              <select id="chart-filter" onchange="loadChart()" class="bg-slate-100 rounded-xl px-4 py-2 text-[10px] font-bold outline-none">
+                <option value="both">ดูทั้งหมด</option><option value="IN">เฉพาะรับเข้า</option><option value="OUT">เฉพาะเบิกออก</option>
+              </select>
+            </div>
+          </div>
+          <div class="h-[400px]"><canvas id="mainChart"></canvas></div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- พื้นที่แสดงผลการ์ด -->
-  <div id="main-grid" class="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-    <!-- ข้อมูลจาก Google Sheets จะถูกวาดตรงนี้ -->
+  <div id="modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center opacity-0 pointer-events-none transition-all z-50 p-4 text-center">
+    <div class="bg-white w-full max-w-sm rounded-[3rem] shadow-2xl p-10 scale-95 transition-transform duration-300">
+      <div id="modal-color" class="w-16 h-16 rounded-3xl mx-auto mb-6 flex items-center justify-center text-white text-2xl font-bold shadow-inner"></div>
+      <h3 id="modal-title" class="text-2xl font-bold mb-2"></h3>
+      <p id="modal-sub" class="text-[10px] text-slate-400 mb-8 uppercase tracking-widest"></p>
+      <input type="number" id="modal-qty" placeholder="0" class="w-full text-center text-4xl font-bold p-5 bg-slate-50 rounded-3xl border-2 border-slate-100 outline-none focus:border-blue-500 mb-8 transition-all">
+      <div class="flex gap-4">
+        <button onclick="closeModal()" class="flex-1 py-4 bg-slate-100 text-slate-500 font-bold rounded-2xl hover:bg-slate-200 transition">ยกเลิก</button>
+        <button id="modal-submit" class="flex-1 py-4 bg-[#102a96] text-white font-bold rounded-2xl hover:bg-blue-800 shadow-xl shadow-blue-100">ตกลง</button>
+      </div>
+    </div>
   </div>
 
+  <div id="toast-container" class="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-3 pointer-events-none"></div>
+
   <script>
-    // --- ⚠️ วางลิงก์ที่ได้จาก Google Apps Script ตรงนี้ ⚠️ ---
-    const API_URL = "https://script.google.com/macros/s/AKfycbxe9BZIk5VD8tuLO0aOUgHGFtoRlqgE7z2XCuxODOltWZglTb6TyUAiC3KXI-XNSXjl/exec"; 
+    const API_URL = "https://script.google.com/macros/s/AKfycbwNONVyNvb-t0STCop_MmGj5k0QJGKTuY_f0Y_GYzKVXIAPRBs-z0p0sXnSIVEmTacV/exec"; 
+    let inventory = [];
+    let currentMachine = 'all', currentModalTask = null, chartInstance = null;
 
-    async function fetchData() {
-      try {
-        const response = await fetch(`${API_URL}?action=get`);
-        const data = await response.json();
-        renderCards(data);
-        document.getElementById('loading-status').innerText = "ONLINE";
-        document.getElementById('loading-status').className = "text-xs font-bold text-green-500 uppercase tracking-widest";
-      } catch (err) {
-        console.error(err);
-        document.getElementById('loading-status').innerText = "OFFLINE";
-      }
+    async function init() {
+      const resp = await fetch(`${API_URL}?action=get&t=${Date.now()}`);
+      inventory = await resp.json();
+      renderCards(currentMachine === 'all' ? null : currentMachine);
+      renderMachines();
+      document.getElementById('status-dot').className = "w-3 h-3 rounded-full bg-green-500";
+      lucide.createIcons();
     }
 
-    function renderCards(data) {
-      const grid = document.getElementById('main-grid');
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container'), toast = document.createElement('div');
+      const bgColor = type === 'success' ? 'bg-slate-800' : 'bg-red-600';
+      toast.className = `${bgColor} text-white px-10 py-5 rounded-2xl shadow-2xl flex items-center gap-4 transform translate-y-10 opacity-0 transition-all duration-500`;
+      toast.innerHTML = `<i data-lucide="${type==='success'?'check':'alert-triangle'}" class="w-6 h-6"></i><span class="text-[18px] font-semibold tracking-wide uppercase">${message}</span>`;
+      container.appendChild(toast);
+      lucide.createIcons();
+      setTimeout(() => toast.classList.remove('translate-y-10', 'opacity-0'), 10);
+      setTimeout(() => {
+        toast.classList.add('translate-y-10', 'opacity-0');
+        setTimeout(() => toast.remove(), 500);
+      }, 2000);
+    }
+
+    function renderCards(machine = null) {
+      const grid = document.getElementById('inventory-view');
+      const data = machine ? inventory.filter(i => i.machine === machine) : inventory;
       grid.innerHTML = data.map(item => `
-        <div class="card-item bg-white p-6 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-white hover:scale-[1.02] transition-transform" data-search="${item.machine} ${item.id}">
-          <div class="flex justify-between items-start mb-6">
-            <div class="w-12 h-12 rounded-2xl shadow-inner ${item.hex === '#ffffff' ? 'border border-slate-200' : ''}" style="background-color: ${item.hex}"></div>
-            <span class="text-[10px] font-black px-3 py-1 bg-slate-100 text-slate-400 rounded-full tracking-tighter uppercase">${item.machine}</span>
-          </div>
-          
-          <h2 class="font-bold text-slate-700 text-lg mb-1">${item.type}</h2>
-          <p class="text-xs text-slate-400 mb-6 leading-relaxed h-8 overflow-hidden">${item.id}</p>
-          
+        <div class="card bg-white p-6 rounded-[2.5rem] shadow-sm border border-white hover:shadow-xl transition-all relative">
+          ${item.qty <= 5 ? '<div class="absolute -top-2 -right-2 bg-red-500 text-white text-[8px] font-bold px-3 py-1 rounded-full animate-bounce shadow-lg">LOW STOCK</div>' : ''}
+          <div class="w-10 h-10 rounded-2xl mb-6 shadow-inner" style="background-color:${item.hex}"></div>
+          <h3 class="font-bold text-slate-700 text-base mb-1">${item.type}</h3>
+          <p class="text-[10px] text-slate-400 mb-6 uppercase h-8 overflow-hidden">${item.id}</p>
           <div class="flex justify-between items-center mb-6">
-            <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden mr-4">
-              <div class="h-full transition-all duration-1000" style="width: ${Math.min((item.qty/30)*100, 100)}%; background-color: ${item.hex}"></div>
-            </div>
-            <span class="text-sm font-black text-slate-700">${item.qty}</span>
+            <div class="flex-1 h-1.5 bg-slate-100 rounded-full mr-4"><div class="h-full rounded-full transition-all duration-1000" style="width:${Math.min((item.qty/25)*100, 100)}%; background-color:${item.hex}"></div></div>
+            <span class="text-sm font-bold text-slate-700">${item.qty}</span>
           </div>
-
           <div class="grid grid-cols-2 gap-3">
-            <button onclick="handleUpdate('${item.id}', 'IN')" class="py-3 bg-slate-50 text-slate-500 rounded-2xl text-[11px] font-bold hover:bg-green-500 hover:text-white transition-all">รับเข้า</button>
-            <button onclick="handleUpdate('${item.id}', 'OUT')" class="py-3 bg-indigo-600 text-white rounded-2xl text-[11px] font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200">เบิกออก</button>
+            <button onclick="openModal('${item.id}', 'IN', '${item.hex}')" class="py-3 bg-slate-50 text-slate-500 rounded-2xl text-[11px] font-bold hover:bg-green-500 hover:text-white transition-all">รับเข้า</button>
+            <button onclick="openModal('${item.id}', 'OUT', '${item.hex}')" class="py-3 bg-[#0a2384] text-white rounded-xl text-[11px] font-bold hover:bg-blue-800 transition-all shadow-lg shadow-blue-100">เบิกออก</button>
           </div>
-        </div>
-      `).join('');
+        </div>`).join('');
     }
 
-    async function handleUpdate(id, type) {
-      const amt = prompt(`ระบุจำนวนที่ต้องการ ${type === 'IN' ? 'รับเข้า' : 'เบิกออก'}:`);
-      if (amt && !isNaN(amt)) {
-        document.getElementById('loading-status').innerText = "SAVING...";
-        const response = await fetch(`${API_URL}?action=update&id=${encodeURIComponent(id)}&amt=${amt}&type=${type}`);
-        const result = await response.json();
-        alert(result.result);
-        fetchData();
+    function openModal(id, type, hex) {
+      currentModalTask = { id, type };
+      const m = document.getElementById('modal'); m.classList.add('modal-show');
+      document.getElementById('modal-title').innerText = type === 'IN' ? 'รับเข้าสต็อก' : 'เบิกของออก';
+      document.getElementById('modal-sub').innerText = id;
+      document.getElementById('modal-color').style.backgroundColor = hex;
+      document.getElementById('modal-qty').value = ''; document.getElementById('modal-qty').focus();
+    }
+
+    document.getElementById('modal-submit').onclick = async () => {
+      const val = parseFloat(document.getElementById('modal-qty').value);
+      if (val > 0) {
+        const { id, type } = currentModalTask; closeModal();
+        document.getElementById('status-dot').className = "w-3 h-3 rounded-full bg-orange-500 animate-spin";
+        
+        const idx = inventory.findIndex(i => i.id === id);
+        if (idx !== -1) {
+          inventory[idx].qty = (type === 'IN') ? inventory[idx].qty + val : inventory[idx].qty - val;
+          renderCards(currentMachine === 'all' ? null : currentMachine);
+        }
+
+        try {
+          const resp = await fetch(`${API_URL}?action=update&id=${encodeURIComponent(id)}&amt=${val}&type=${type}`);
+          const final = await resp.json();
+          showToast(final.result, final.result.includes("SUCCESS") ? 'success' : 'error');
+          document.getElementById('status-dot').className = "w-3 h-3 rounded-full bg-green-500";
+          setTimeout(() => init(), 3000);
+        } catch (err) { showToast("ERROR CONNECTING", "error"); }
+      }
+    };
+
+    function changeView(view, param = null) {
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('sidebar-active'));
+      document.getElementById('inventory-view').classList.add('hidden');
+      document.getElementById('summary-view').classList.add('hidden');
+      if (view === 'all') {
+        currentMachine = 'all'; document.getElementById('inventory-view').classList.remove('hidden');
+        document.getElementById('nav-all').classList.add('sidebar-active'); renderCards();
+      } else if (view === 'summary') {
+        document.getElementById('summary-view').classList.remove('hidden');
+        document.getElementById('nav-summary').classList.add('sidebar-active'); loadChart();
+      } else {
+        currentMachine = param; document.getElementById('inventory-view').classList.remove('hidden');
+        document.getElementById(`nav-${param.replace(/\s/g, '')}`).classList.add('sidebar-active'); renderCards(param);
       }
     }
 
-    function filter() {
-      const query = document.getElementById('search').value.toLowerCase();
-      document.querySelectorAll('.card-item').forEach(card => {
-        card.style.display = card.getAttribute('data-search').toLowerCase().includes(query) ? '' : 'none';
+    async function loadChart() {
+      const resp = await fetch(`${API_URL}?action=getLogs&t=${Date.now()}`);
+      const logs = await resp.json();
+      const timeframe = document.getElementById('timeframe').value, filter = document.getElementById('chart-filter').value;
+      const selectedMachine = document.getElementById('chart-machine').value;
+      const grouped = {};
+      
+      let labels = [];
+      if (timeframe === 'day') {
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          const key = d.toLocaleDateString();
+          labels.push(key);
+          grouped[key] = { IN: 0, OUT: 0 };
+        }
+      }
+
+      logs.slice(1).forEach(l => {
+        // ดึงข้อมูลเครื่องพิมพ์จากรายการสินค้าปัจจุบันเพื่อนำมาคัดกรองข้อมูลกราฟ
+        const itemInfo = inventory.find(i => i.id === l[1]);
+        const machineName = itemInfo ? itemInfo.machine : 'unknown';
+
+        // เงื่อนไขคัดกรองสรุปแยกตามเครื่องพิมพ์ตามสั่ง
+        if (selectedMachine !== 'all' && selectedMachine !== machineName) return;
+
+        const d = new Date(l[0]); let key = d.toLocaleDateString();
+        if (timeframe === 'month') key = `${d.getMonth()+1}/${d.getFullYear()}`;
+        if (timeframe === 'year') key = d.getFullYear();
+        
+        if (timeframe !== 'day' && !grouped[key]) grouped[key] = { IN: 0, OUT: 0 };
+        if (grouped[key]) {
+           grouped[key][l[2]] += l[3];
+        }
       });
+      
+      if (timeframe !== 'day') labels = Object.keys(grouped).slice(-10);
+      
+      const ds = [];
+      if (filter !== 'OUT') ds.push({ label: 'รับเข้า', data: labels.map(l=>grouped[l].IN), borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.1)', fill: true, tension: 0.4 });
+      if (filter !== 'IN') ds.push({ label: 'เบิกออก', data: labels.map(l=>grouped[l].OUT), borderColor: '#102a96', backgroundColor: 'rgba(16,42,150,0.1)', fill: true, tension: 0.4 });
+      
+      if (chartInstance) chartInstance.destroy();
+      chartInstance = new Chart(document.getElementById('mainChart'), { type: 'line', data: { labels, datasets: ds }, options: { responsive: true, maintainAspectRatio: false }});
     }
 
-    // เริ่มทำงานทันทีที่เปิดเว็บ
-    fetchData();
+    async function exportExcel() {
+      const resp = await fetch(`${API_URL}?action=getLogs`);
+      const logs = await resp.json();
+      let csv = "\ufeffวันที่,รหัสสินค้า,ประเภท,จำนวน,ผู้บันทึก\n";
+      logs.slice(1).forEach(r => csv += r.join(",") + "\n");
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+      link.download = `ink_report_${Date.now()}.csv`; link.click();
+    }
+
+    function renderMachines() {
+      const list = [...new Set(inventory.map(i => i.machine))];
+      document.getElementById('machine-menu').innerHTML = list.map(m => `
+        <button onclick="changeView('machine', '${m}')" id="nav-${m.replace(/\s/g, '')}" class="nav-btn w-full flex items-center gap-3 p-4 rounded-xl hover:bg-white/5 transition opacity-60 text-xs">
+          <i data-lucide="monitor" class="w-4 h-4"></i> ${m}
+        </button>`).join('');
+
+      // อัปเดตรายชื่อเครื่องพิมพ์ใน Dropdown ของหน้าสรุปกราฟโดยอัตโนมัติ
+      const chartMachineSelect = document.getElementById('chart-machine');
+      if (chartMachineSelect) {
+        chartMachineSelect.innerHTML = '<option value="all">ทุกเครื่องพิมพ์</option>' + 
+          list.map(m => `<option value="${m}">${m}</option>`).join('');
+      }
+      lucide.createIcons();
+    }
+    function closeModal() { document.getElementById('modal').classList.remove('modal-show'); }
+    function filter() {
+      const q = document.getElementById('search').value.toLowerCase();
+      document.querySelectorAll('.card').forEach(c => c.style.display = c.innerText.toLowerCase().includes(q) ? '' : 'none');
+    }
+    init();
   </script>
 </body>
 </html>
