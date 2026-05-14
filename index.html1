@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paint Stock System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen p-4 md:p-10">
+
+  <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
+    <h1 class="text-3xl font-black text-slate-800 tracking-tight">INK STOCK 🎨</h1>
+    <div class="flex items-center gap-4">
+      <div id="loading-status" class="text-xs font-bold text-slate-400 uppercase tracking-widest">Connecting...</div>
+      <input type="text" id="search" onkeyup="filter()" placeholder="ค้นหาเครื่องหรือรหัสสี..." 
+             class="px-5 py-2.5 rounded-2xl border-none shadow-sm focus:ring-2 focus:ring-indigo-500 w-full md:w-72 outline-none">
+    </div>
+  </div>
+
+  <!-- พื้นที่แสดงผลการ์ด -->
+  <div id="main-grid" class="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+    <!-- ข้อมูลจาก Google Sheets จะถูกวาดตรงนี้ -->
+  </div>
+
+  <script>
+    // --- ⚠️ วางลิงก์ที่ได้จาก Google Apps Script ตรงนี้ ⚠️ ---
+    const API_URL = "วาง_URL_ของ_APPS_SCRIPT_ตรงนี้"; 
+
+    async function fetchData() {
+      try {
+        const response = await fetch(`${API_URL}?action=get`);
+        const data = await response.json();
+        renderCards(data);
+        document.getElementById('loading-status').innerText = "ONLINE";
+        document.getElementById('loading-status').className = "text-xs font-bold text-green-500 uppercase tracking-widest";
+      } catch (err) {
+        console.error(err);
+        document.getElementById('loading-status').innerText = "OFFLINE";
+      }
+    }
+
+    function renderCards(data) {
+      const grid = document.getElementById('main-grid');
+      grid.innerHTML = data.map(item => `
+        <div class="card-item bg-white p-6 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-white hover:scale-[1.02] transition-transform" data-search="${item.machine} ${item.id}">
+          <div class="flex justify-between items-start mb-6">
+            <div class="w-12 h-12 rounded-2xl shadow-inner ${item.hex === '#ffffff' ? 'border border-slate-200' : ''}" style="background-color: ${item.hex}"></div>
+            <span class="text-[10px] font-black px-3 py-1 bg-slate-100 text-slate-400 rounded-full tracking-tighter uppercase">${item.machine}</span>
+          </div>
+          
+          <h2 class="font-bold text-slate-700 text-lg mb-1">${item.type}</h2>
+          <p class="text-xs text-slate-400 mb-6 leading-relaxed h-8 overflow-hidden">${item.id}</p>
+          
+          <div class="flex justify-between items-center mb-6">
+            <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden mr-4">
+              <div class="h-full transition-all duration-1000" style="width: ${Math.min((item.qty/30)*100, 100)}%; background-color: ${item.hex}"></div>
+            </div>
+            <span class="text-sm font-black text-slate-700">${item.qty}</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <button onclick="handleUpdate('${item.id}', 'IN')" class="py-3 bg-slate-50 text-slate-500 rounded-2xl text-[11px] font-bold hover:bg-green-500 hover:text-white transition-all">รับเข้า</button>
+            <button onclick="handleUpdate('${item.id}', 'OUT')" class="py-3 bg-indigo-600 text-white rounded-2xl text-[11px] font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200">เบิกออก</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function handleUpdate(id, type) {
+      const amt = prompt(`ระบุจำนวนที่ต้องการ ${type === 'IN' ? 'รับเข้า' : 'เบิกออก'}:`);
+      if (amt && !isNaN(amt)) {
+        document.getElementById('loading-status').innerText = "SAVING...";
+        const response = await fetch(`${API_URL}?action=update&id=${encodeURIComponent(id)}&amt=${amt}&type=${type}`);
+        const result = await response.json();
+        alert(result.result);
+        fetchData();
+      }
+    }
+
+    function filter() {
+      const query = document.getElementById('search').value.toLowerCase();
+      document.querySelectorAll('.card-item').forEach(card => {
+        card.style.display = card.getAttribute('data-search').toLowerCase().includes(query) ? '' : 'none';
+      });
+    }
+
+    // เริ่มทำงานทันทีที่เปิดเว็บ
+    fetchData();
+  </script>
+</body>
+</html>
